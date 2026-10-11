@@ -14,7 +14,7 @@ on:
       - 'requirements-dev.txt'
       - '.github/workflows/**'
   schedule:
-    - cron: '7,17,27,37,47,57 * * * *'
+    - cron: '2-57/5 * * * *'
   workflow_dispatch:
 
 permissions:
