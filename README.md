@@ -27,22 +27,17 @@
 
 保留来源分组注释；每个文件按选取分组的顺序去除完全相同的规则，不合并父域名和子域名。
 
-## Soga YAML 格式
+## 规则 YAML 格式
 
-输出结构参考 [上游 Soga 示例](https://raw.githubusercontent.com/1-stream/1stream-public-utils/main/soga.yml)，使用最新 Xray 列表作为规则来源，不从该 Soga 示例抽取规则：
+规则字符串采用 [上游 Soga 示例](https://raw.githubusercontent.com/1-stream/1stream-public-utils/main/soga.yml) 中的写法，使用最新 Xray 列表作为规则来源。输出只包含 YAML 根序列和原分组注释：
 
 ```yaml
-"https://example.com/dns-query":
-  strategy: ipv4_only
-  rules:
-    # ---------- > Global Plaform
-    # > Netflix
-    - "domain:netflix.com"
+# ---------- > Global Plaform
+# > Netflix
+- "domain:netflix.com"
 ```
 
-`https://example.com/dns-query` 是占位地址，不提供实际 DNS 服务。使用文件时应替换成实际的 DoH 地址。这些文件是 DNS 分流模板，尚未在运行中的 Soga 上验证加载和解锁效果。
-
-可以通过 `--dns-server` 生成使用实际地址的本地文件。公共仓库中不能保存带凭据的 DNS 地址；脚本拒绝 URL 用户名/密码、查询参数、片段和空白。
+不输出 `# generated`、`# region`、DNS 地址、`strategy` 和 `rules:` 字段。这些文件是规则片段，需要放进你自己的 Soga 配置的 `rules:` 列表中并按配置位置缩进，不是完整的 `dns.yml`。Soga 实际加载和解锁效果尚未现场验证。
 
 ## 使用和验证
 
@@ -64,9 +59,8 @@ python3 -m venv .venv
 # 用已经下载的列表离线生成
 .venv/bin/python scripts/update_rules.py --source-file /path/to/stream.xray.list
 
-# 在仓库外生成带实际 DNS 的本地配置
+# 指定其他规则输出目录
 .venv/bin/python scripts/update_rules.py \
-  --dns-server https://dns.example.net/dns-query \
   --output-dir /path/to/local-dns-rules
 ```
 
@@ -78,7 +72,7 @@ python3 -m venv .venv
 
 GitHub 对连续 60 天没有仓库活动的公开仓库会自动停用定时工作流。长期无规则更新时，可在 Actions 页面重新启用工作流；这是 [GitHub schedule 的平台限制](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)。
 
-PR 只运行测试，更新任务仅在仓库默认分支运行。生成任务拥有 `contents: write` 权限，分支保护或账户策略若阻止机器人推送，需要给该任务合适的发布权限。可在 GitHub Actions Variables 设置不含凭据的 `DNS_SERVER`，不设置时沿用占位地址。
+PR 只运行测试，更新任务仅在仓库默认分支运行。生成任务拥有 `contents: write` 权限，分支保护或账户策略若阻止机器人推送，需要给该任务合适的发布权限。
 
 只有 `rules/` 的实际内容变化才提交和推送；不把更新时间、上游全文或原文件哈希写入产物。普通注释和 China Media 内容变化不会造成无意义提交。国家/服务标题是输出中保留的注释，标题变化会反映到对应文件。
 

@@ -7,7 +7,6 @@ import re
 import json
 import argparse
 import urllib.request
-import urllib.parse
 import urllib.error
 import tempfile
 from pathlib import Path
@@ -16,7 +15,6 @@ SOURCE_URL = (
     "https://raw.githubusercontent.com/1-stream/1stream-public-utils/"
     "refs/heads/main/stream.xray.list"
 )
-DEFAULT_DNS = "https://example.com/dns-query"
 MAX_BYTES = 2 * 1024 * 1024 + 1
 
 ISO_2 = frozenset(
@@ -57,29 +55,6 @@ SEC_HEAD_RE = re.compile(r"^#\s*-{5,}\s*>\s+(.+)$")
 SEC_ANOMALY_RE = re.compile(r"^#\s*-{5,}")
 SUB_RE = re.compile(r"^#\s*>\s+(.+)$")
 FILENAME_RE = re.compile(r"^[A-Z]{2,3}\.yml$")
-
-
-def _validate_dns(dns_server: str) -> None:
-    if any(c.isspace() for c in dns_server):
-        raise ValueError("dns_server must not contain whitespace")
-    if "?" in dns_server:
-        raise ValueError("dns_server must not contain query (?)")
-    if "#" in dns_server:
-        raise ValueError("dns_server must not contain fragment (#)")
-    parsed = urllib.parse.urlparse(dns_server)
-    if parsed.scheme != "https":
-        raise ValueError("dns_server must be an HTTPS URL")
-    if not parsed.hostname:
-        raise ValueError("dns_server hostname must be non-empty")
-    if parsed.username is not None:
-        raise ValueError("dns_server must not contain username")
-    if parsed.password is not None:
-        raise ValueError("dns_server must not contain password")
-    _ = parsed.port  # Validate explicit port if supplied.
-    if parsed.query:
-        raise ValueError("dns_server must not contain query")
-    if parsed.fragment:
-        raise ValueError("dns_server must not contain fragment")
 
 
 def parse_source(text: str) -> list[dict]:
@@ -328,14 +303,8 @@ def build_regions(blocks: list[dict]) -> dict[str, list[dict]]:
     return regions
 
 
-def render_yaml(code: str, blocks: list[dict], dns_server: str) -> str:
-    _validate_dns(dns_server)
+def render_yaml(blocks: list[dict]) -> str:
     lines: list[str] = []
-    lines.append("# generated")
-    lines.append(f"# region: {code}")
-    lines.append(f"{json.dumps(dns_server)}:")
-    lines.append("  strategy: ipv4_only")
-    lines.append("  rules:")
 
     seen: set[str] = set()
     prev_section = None
@@ -353,27 +322,26 @@ def render_yaml(code: str, blocks: list[dict], dns_server: str) -> str:
 
         # Emit section heading only when changed
         if b["section"] != prev_section:
-            lines.append(f"    # ---------- > {b['section']}")
+            lines.append(f"# ---------- > {b['section']}")
             prev_section = b["section"]
 
         # Emit title comment
         if b["title"]:
-            lines.append(f"    # > {b['title']}")
+            lines.append(f"# > {b['title']}")
 
         for r in b_rules:
-            lines.append(f"    - {json.dumps(r)}")
+            lines.append(f"- {json.dumps(r)}")
 
     return "\n".join(lines) + "\n"
 
 
-def generate(text: str, dns_server: str = DEFAULT_DNS) -> dict[str, str]:
-    _validate_dns(dns_server)
+def generate(text: str) -> dict[str, str]:
     blocks = parse_source(text)
     regions = build_regions(blocks)
     outputs: dict[str, str] = {}
     for code in sorted(regions.keys()):
         filename = f"{code}.yml"
-        outputs[filename] = render_yaml(code, regions[code], dns_server)
+        outputs[filename] = render_yaml(regions[code])
     return outputs
 
 
@@ -464,8 +432,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output-dir", type=str,
                         default=str(Path(__file__).resolve().parents[1] / "rules"),
                         help="Output directory for YAML files")
-    parser.add_argument("--dns-server", type=str, default=DEFAULT_DNS,
-                        help="DNS server URL for generated YAML")
     parser.add_argument("--check", action="store_true",
                         help="Check mode: report diffs without writing")
     args = parser.parse_args(argv)
@@ -476,7 +442,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             text = _fetch(SOURCE_URL)
 
-        outputs = generate(text, dns_server=args.dns_server)
+        outputs = generate(text)
         output_dir = Path(args.output_dir)
         changed = update_files(outputs, output_dir, check=args.check)
 

@@ -95,7 +95,7 @@ ALL_CODES = set(EXPECTED)  # 13 codes
 
 
 def _rules(outputs, code):
-    return yaml.safe_load(outputs[code + '.yml'])['https://example.com/dns-query']['rules']
+    return yaml.safe_load(outputs[code + '.yml'])
 
 
 def _gen():
@@ -114,15 +114,20 @@ class TestUpdateRules(unittest.TestCase):
             self.assertEqual(set(_rules(out, code)), exp, msg=code)
 
     def test_03_yaml_structure(self):
-        out = _gen()
         for code in ALL_CODES:
-            doc = yaml.safe_load(out[code + '.yml'])
-            self.assertEqual(list(doc.keys()), ['https://example.com/dns-query'])
-            inner = doc['https://example.com/dns-query']
-            self.assertEqual(inner['strategy'], 'ipv4_only')
-            self.assertIn('rules', inner)
-            self.assertEqual(len(inner['rules']), len(set(inner['rules'])))
-            self.assertTrue(all(isinstance(r, str) for r in inner['rules']))
+            text = _gen()[code + '.yml']
+            doc = yaml.safe_load(text)
+            self.assertIsInstance(doc, list)
+            self.assertTrue(all(isinstance(item, str) for item in doc))
+            self.assertEqual(len(doc), len(set(doc)))
+            lines = text.splitlines()
+            stripped_lines = [l.strip() for l in lines]
+            self.assertIn('# ---------- > Global Plaform', stripped_lines)
+            self.assertIn('# > Netflix', stripped_lines)
+            forbidden = ['# generated', '# region:', 'https://', '"https://', 'strategy:', 'rules:']
+            for line in stripped_lines:
+                for f in forbidden:
+                    self.assertFalse(line.startswith(f), f"Forbidden header found: {f} in line: {line}")
 
     def test_04_crlf_and_idempotent(self):
         out_a = _gen()
@@ -161,11 +166,27 @@ class TestUpdateRules(unittest.TestCase):
         self.assertIn('ES.yml', out2)
         self.assertIn('domain:es.test', _rules(out2, 'ES'))
 
-    def test_08_dns_url_rejected(self):
-        for bad in ['https://x/a\nb/dns-query', 'https://u:p@x/dns-query',
-                    'https://x/dns-query?k=1', 'https://x/dns-query#f']:
-            with self.assertRaises(ValueError, msg=bad):
-                u.generate(FIXTURE, dns_server=bad)
+    def test_08_rule_strings_roundtrip(self):
+        extra_rules = [
+            r'regexp:^example\.test/(foo|bar)$',
+            'keyword:quoted "name"',
+            'full:exact.example.test'
+        ]
+        # Construct source fixture with extra rules inserted after jp.test
+        insertion = '\n' + '\n'.join(json.dumps(rule) + ',' for rule in extra_rules)
+        source = FIXTURE.replace('"domain:jp.test",', '"domain:jp.test",' + insertion)
+
+        result = u.generate(source)
+        jp_yml = result['JP.yml']
+        rules = yaml.safe_load(jp_yml)
+
+        for rule in extra_rules:
+            self.assertIn(rule, rules)
+
+        # Assert comments retained (checking global lines in JP file for safety, assuming structure preserved)
+        stripped_lines = [l.strip() for l in jp_yml.splitlines()]
+        self.assertIn('# ---------- > Global Plaform', stripped_lines)
+        self.assertIn('# > Netflix', stripped_lines)
 
     def test_09_update_files(self):
         out = _gen()

@@ -51,14 +51,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Generate rules
-        env:
-          DNS_SERVER: ${{ vars.DNS_SERVER }}
-        run: |
-          if [ -n "$DNS_SERVER" ]; then
-            python scripts/update_rules.py --dns-server "$DNS_SERVER"
-          else
-            python scripts/update_rules.py
-          fi
+        run: python scripts/update_rules.py
       - name: Commit and push if changed
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch || github.ref_name }}
