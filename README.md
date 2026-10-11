@@ -1,6 +1,6 @@
 # soga-stream-rules
 
-自动把 [1stream 的 Xray 列表](https://raw.githubusercontent.com/1-stream/1stream-public-utils/refs/heads/main/stream.xray.list) 按地区转换成 Soga DNS YAML；GitHub Actions 每 6 小时检测一次，只有生成文件内容发生变化才提交更新。
+自动把 [1stream 的 Xray 列表](https://raw.githubusercontent.com/1-stream/1stream-public-utils/refs/heads/main/stream.xray.list) 按地区转换成 Soga DNS YAML；GitHub Actions 每 10 分钟检测一次，只有生成文件内容发生变化才提交更新。
 
 公开仓库：[vruru/soga-stream-rules](https://github.com/vruru/soga-stream-rules)。
 
@@ -74,7 +74,7 @@ python3 -m venv .venv
 
 ## 自动更新
 
-`.github/workflows/update-rules.yml` 提供定时和手动触发，也在脚本、测试、依赖或工作流修改后运行。定时表达式 `17 */6 * * *` 对应北京时间约每天 02:17、08:17、14:17、20:17；GitHub 定时执行可能延迟。
+`.github/workflows/update-rules.yml` 提供定时和手动触发，也在脚本、测试、依赖或工作流修改后运行。定时表达式 `7,17,27,37,47,57 * * * *` 表示每小时第 7、17、27、37、47、57 分钟检查，间隔 10 分钟；GitHub 定时执行可能延迟。
 
 GitHub 对连续 60 天没有仓库活动的公开仓库会自动停用定时工作流。长期无规则更新时，可在 Actions 页面重新启用工作流；这是 [GitHub schedule 的平台限制](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)。
 
