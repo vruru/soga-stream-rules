@@ -29,15 +29,32 @@
 
 ## 规则 YAML 格式
 
-规则字符串采用 [上游 Soga 示例](https://raw.githubusercontent.com/1-stream/1stream-public-utils/main/soga.yml) 中的写法，使用最新 Xray 列表作为规则来源。输出只包含 YAML 根序列和原分组注释：
+规则字符串采用 [上游 Soga 示例](https://raw.githubusercontent.com/1-stream/1stream-public-utils/main/soga.yml) 中的写法，使用最新 Xray 列表作为规则来源。每个文件输出完整的单 DNS 配置，保留原分组注释，例如日本：
 
 ```yaml
-# ---------- > Global Plaform
-# > Netflix
-- "domain:netflix.com"
+tcp://nrt.core.access.zznet.fun:
+  strategy: ipv4_first
+  rules:
+    # ---------- > Global Plaform
+    # > Netflix
+    - "domain:netflix.com"
 ```
 
-不输出 `# generated`、`# region`、DNS 地址、`strategy` 和 `rules:` 字段。这些文件是规则片段，需要放进你自己的 Soga 配置的 `rules:` 列表中并按配置位置缩进，不是完整的 `dns.yml`。Soga 实际加载和解锁效果尚未现场验证。
+初始头部默认 `strategy: ipv4_first`，DNS 地址如下：
+
+| 文件 | 初始 DNS 地址 |
+| --- | --- |
+| HK.yml | `tcp://hkg.core.access.zznet.fun` |
+| JP.yml | `tcp://nrt.core.access.zznet.fun` |
+| SG.yml | `tcp://sin2.edge.access.zznet.fun` |
+| US.yml | `tcp://lax.core.access.zznet.fun` |
+| 其他地区及未来新增国家 | `tcp://example.com` |
+
+**可以手动修改仓库中某个文件的 DNS 地址、strategy 和头部注释。自动更新原样保留现有文件从开头到 `  rules:` 行（含该行注释和换行）的内容，只替换下方规则与分组注释。** 默认头仅用于新文件以及旧版根列表的一次迁移；以后更改脚本默认值也不会重置现有文件头。
+
+头部须保持单个 DNS 地址作为顶层键，`strategy` 和 `rules:` 缩进两格，规则缩进四格。支持头部注释、空行、端口、引号包裹的 DNS 地址和额外的简单标量字段；复杂嵌套字段、多个 DNS 顶层键不支持。不要删除 `rules:`，也不要在同一行填入规则列表。结构异常时整批更新报错并保留原文件，修正后下次任务继续更新。
+
+不添加 `# generated` 或 `# region` 注释。`tcp://example.com` 是占位地址，使用其他地区文件前需要替换成你的 DNS 上游。Soga 实际加载和解锁效果尚未现场验证。
 
 ## 使用和验证
 
@@ -85,6 +102,6 @@ PR 只运行测试，更新任务仅在仓库默认分支运行。生成任务�
 - `AGENTS.md`：本项目维护约定。
 - `scripts/update_rules.py`：解析、地区组合、生成和文件更新。
 - `tests/test_update_rules.py`：地区集合、隔离、动态发现、结构、稳定性和失败保护测试。
-- `rules/*.yml`：自动生成的公开规则模板，不手动编辑。
+- `rules/*.yml`：公开的完整 DNS 配置；允许手动修改头部，rules 下内容由脚本生成。
 
-上游未附加到此项目，临时列表、下载文件和本地 DNS 配置不应进入公共仓库。
+上游未附加到此项目，临时列表、下载文件、密钥和令牌不应进入公共仓库。

@@ -17,6 +17,18 @@ SOURCE_URL = (
 )
 MAX_BYTES = 2 * 1024 * 1024 + 1
 
+DNS_SERVERS = {
+    "HK": "tcp://hkg.core.access.zznet.fun",
+    "JP": "tcp://nrt.core.access.zznet.fun",
+    "SG": "tcp://sin2.edge.access.zznet.fun",
+    "US": "tcp://lax.core.access.zznet.fun",
+}
+
+
+def default_header(code: str) -> str:
+    uri = DNS_SERVERS.get(code, "tcp://example.com")
+    return f"{uri}:\n  strategy: ipv4_first\n  rules:\n"
+
 ISO_2 = frozenset(
     "AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ "
     "BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR "
@@ -303,7 +315,187 @@ def build_regions(blocks: list[dict]) -> dict[str, list[dict]]:
     return regions
 
 
-def render_yaml(blocks: list[dict]) -> str:
+_URI = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://\S+\Z")
+_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_.-]*\Z")
+_BARE_KEY = re.compile(r"\S*?(?=:(?:\s|\Z))")
+_DQ = re.compile(r'"(?:[^"\\\x00-\x1f]|\\.)*"')
+_SQ = re.compile(r"'(?:[^'\x00-\x1f]|'')*'")
+_WS = re.compile(r"\s*")
+_TAIL = re.compile(r"\s*(?:(?<=\s)#.*)?\Z")
+_INDICATORS = set("-?:,[]{}#&*!|>'\"%@`")
+
+
+def _fail(no, msg):
+    raise ValueError(f"line {no}: {msg}")
+
+
+def _key(line, pos, no, root):
+    c = line[pos:pos + 1]
+    if c == '"':
+        m = _DQ.match(line, pos)
+        k = json.loads(m.group()) if m else None
+    elif c == "'":
+        m = _SQ.match(line, pos)
+        k = m.group()[1:-1].replace("''", "'") if m else None
+    else:
+        m = _BARE_KEY.match(line, pos)
+        k = m.group() if m else None
+        if k is not None and not root and not _NAME.match(k):
+            _fail(no, "invalid key")
+    if m is None or not line.startswith(":", m.end()):
+        _fail(no, "invalid key")
+    end = m.end() + 1
+    if end < len(line) and not line[end].isspace():
+        _fail(no, "invalid key")
+    if root and not _URI.match(k):
+        _fail(no, "root key must be a URI")
+    return k, end
+
+
+def _value(line, pos, no, single=True):
+    pos = _WS.match(line, pos).end()
+    if pos == len(line) or line[pos] == "#":
+        return None
+    c = line[pos]
+    if c == '"':
+        m = _DQ.match(line, pos)
+        if not m:
+            _fail(no, "invalid quoted scalar")
+        v, end = json.loads(m.group()), m.end()
+    elif c == "'" and single:
+        m = _SQ.match(line, pos)
+        if not m:
+            _fail(no, "invalid quoted scalar")
+        v, end = m.group()[1:-1].replace("''", "'"), m.end()
+    elif c in _INDICATORS:
+        _fail(no, "unsupported scalar")
+    else:
+        cut = re.compile(r"\s#").search(line, pos)
+        v = line[pos:cut.start() if cut else len(line)].rstrip()
+        if ": " in v or v.endswith(":") or "\t" in v:
+            _fail(no, "unsupported scalar")
+        end = pos + len(v)
+    if not _TAIL.match(line, end):
+        _fail(no, "trailing content after scalar")
+    return v
+
+
+def _check_rule(v, no):
+    prefixes = tuple(p if p.endswith(":") else p + ":" for p in VALID_PREFIXES)
+    if not isinstance(v, str) or not any(
+            v.startswith(p) and v[len(p):].strip() for p in prefixes):
+        _fail(no, "invalid rule")
+    return v
+
+
+def _lines(text):
+    for no, raw in enumerate(re.findall(r"[^\n]*\n|[^\n]+\Z", text), 1):
+        line = raw[:-1] if raw.endswith("\n") else raw
+        line = line[:-1] if line.endswith("\r") else line
+        if "\r" in line or line.lstrip(" ").startswith("\t"):
+            _fail(no, "invalid whitespace")
+        yield no, raw, line
+
+
+def split_dns_document(text):
+    if not isinstance(text, str):
+        raise TypeError("document must be str")
+    root, strategy, header_end, offset = False, False, None, 0
+    keys, rules = set(), set()
+    for no, raw, line in _lines(text):
+        offset += len(raw)
+        stripped = line.lstrip(" ")
+        indent = len(line) - len(stripped)
+        if header_end is None:
+            if "\t" in line:
+                _fail(no, "tabs are not supported in header")
+            if not stripped or stripped.startswith("#"):
+                continue
+            if indent == 0:
+                if root:
+                    _fail(no, "second DNS mapping")
+                _, p = _key(line, 0, no, True)
+                if _value(line, p, no) is not None:
+                    _fail(no, "root key must not have inline value")
+                root = True
+            elif indent == 2 and root:
+                k, p = _key(line, 2, no, False)
+                if k in keys:
+                    _fail(no, "duplicate key")
+                keys.add(k)
+                v = _value(line, p, no)
+                if k == "rules":
+                    if v is not None or not raw.endswith("\n") or not strategy:
+                        _fail(no, "invalid rules line")
+                    header_end = offset
+                else:
+                    if not v or not v.strip():
+                        _fail(no, "header scalar must be non-empty")
+                    scalar = line[p:].lstrip()
+                    if not scalar.startswith(('"', "'")):
+                        if (any(c.isspace() or c in '{}[]&*' for c in v)
+                                or v.lower() in {'null', '~'}):
+                            _fail(no, "unsupported header scalar")
+                    if k == "strategy":
+                        strategy = True
+            else:
+                _fail(no, "bad indentation")
+        else:
+            if not stripped:
+                continue
+            if indent != 4:
+                _fail(no, "bad indentation")
+            if stripped.startswith("#"):
+                continue
+            if not stripped.startswith("- "):
+                _fail(no, "invalid rule line")
+            r = _check_rule(_value(line, 6, no, single=False), no)
+            if r in rules:
+                _fail(no, "duplicate rule")
+            rules.add(r)
+    if header_end is None:
+        raise ValueError("missing DNS header")
+    return text[:header_end], text[header_end:]
+
+
+def _check_legacy(text):
+    count = 0
+    for no, _, line in _lines(text):
+        stripped = line.lstrip(" ")
+        if not stripped or stripped.startswith("#"):
+            continue
+        if not line.startswith('- "'):
+            _fail(no, "invalid legacy rule line")
+        _check_rule(_value(line, 2, no, single=False), no)
+        count += 1
+    if not count:
+        raise ValueError("legacy document has no rules")
+
+
+def preserve_header(generated, existing):
+    if isinstance(generated, (bytes, bytearray)):
+        generated = bytes(generated).decode("utf-8", "strict")
+    _, body = split_dns_document(generated)
+    out = generated.encode("utf-8", "strict")
+    if existing is None:
+        return out
+    if not isinstance(existing, (bytes, bytearray)):
+        raise TypeError("existing must be bytes or None")
+    text = bytes(existing).decode("utf-8", "strict")
+    for _, _, line in _lines(text):
+        stripped = line.lstrip(" ")
+        if stripped and not stripped.startswith("#"):
+            if line.startswith("- "):
+                _check_legacy(text)
+                return out
+            break
+    header, _ = split_dns_document(text)
+    merged = header + body
+    split_dns_document(merged)
+    return merged.encode("utf-8", "strict")
+
+
+def render_yaml(code: str, blocks: list[dict]) -> str:
     lines: list[str] = []
 
     seen: set[str] = set()
@@ -332,7 +524,7 @@ def render_yaml(blocks: list[dict]) -> str:
         for r in b_rules:
             lines.append(f"- {json.dumps(r)}")
 
-    return "\n".join(lines) + "\n"
+    return default_header(code) + "".join("    " + line + "\n" for line in lines)
 
 
 def generate(text: str) -> dict[str, str]:
@@ -341,7 +533,7 @@ def generate(text: str) -> dict[str, str]:
     outputs: dict[str, str] = {}
     for code in sorted(regions.keys()):
         filename = f"{code}.yml"
-        outputs[filename] = render_yaml(regions[code])
+        outputs[filename] = render_yaml(code, regions[code])
     return outputs
 
 
@@ -368,12 +560,18 @@ def update_files(
             )
 
     changed = []
+    resolved: dict[str, bytes] = {}
     for name in sorted(outputs):
         target = output_dir / name
         if target.is_symlink() or (target.exists() and not target.is_file()):
             raise ValueError(f"output target is not a regular file: {target}")
-        expected = outputs[name].encode("utf-8")
-        if not target.exists() or target.read_bytes() != expected:
+        existing = target.read_bytes() if target.exists() else None
+        try:
+            expected = preserve_header(outputs[name], existing)
+        except (ValueError, UnicodeError) as error:
+            raise ValueError(f"invalid DNS document in {name}: {error}") from error
+        resolved[name] = expected
+        if existing != expected:
             changed.append(name)
     if check or not changed:
         return changed
@@ -388,7 +586,7 @@ def update_files(
             ) as handle:
                 temp_path = Path(handle.name)
                 staged.append((temp_path, output_dir / name))
-                handle.write(outputs[name].encode("utf-8"))
+                handle.write(resolved[name])
                 handle.flush()
                 os.fsync(handle.fileno())
             temp_path.chmod(0o644)
