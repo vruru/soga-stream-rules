@@ -1,0 +1,74 @@
+name: Update Rules
+
+on:
+  push:
+    paths:
+      - 'scripts/**'
+      - 'tests/**'
+      - 'requirements-dev.txt'
+      - '.github/workflows/**'
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'tests/**'
+      - 'requirements-dev.txt'
+      - '.github/workflows/**'
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install deps
+        run: pip install -r requirements-dev.txt
+      - name: Test
+        run: python -m unittest discover -s tests -v
+
+  update:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || (github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch)
+    permissions:
+      contents: write
+    timeout-minutes: 10
+    concurrency:
+      group: update-soga-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch || github.ref_name }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Generate rules
+        env:
+          DNS_SERVER: ${{ vars.DNS_SERVER }}
+        run: |
+          if [ -n "$DNS_SERVER" ]; then
+            python scripts/update_rules.py --dns-server "$DNS_SERVER"
+          else
+            python scripts/update_rules.py
+          fi
+      - name: Commit and push if changed
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch || github.ref_name }}
+        run: |
+          git add -- rules
+          if git diff --cached --quiet -- rules; then
+            echo 'No rule changes'
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email 'github-actions[bot]@users.noreply.github.com'
+            git commit -m 'chore: update regional rules' --only -- rules
+            git push origin HEAD:"$DEFAULT_BRANCH"
+          fi
