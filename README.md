@@ -14,6 +14,8 @@
 | --- | --- | --- |
 | 香港 | `HK.yml` | 除 China Media 外的全部分组，包括所有地区、全部 AI、Others |
 | 台湾 | `TW.yml` | Global + Taiwan Media + Openai |
+| 加拿大 | `CA.yml` | Global + Canada Media + Openai |
+| 南美 | `SA.yml` | Global + South America Media + Openai |
 | 日本 | `JP.yml` | Global + Japan Media + Openai |
 | 美国 | `US.yml` | Global + North America Media + Openai |
 | 韩国 | `KR.yml` | Global + Korean Media + Openai |
@@ -21,7 +23,7 @@
 | 欧洲 | `GB.yml`、`FR.yml`、`DE.yml`、`NL.yml`、`IT.yml`、`RU.yml`、`UA.yml`、`CH.yml`、`TR.yml` | Global + Europe Media 无前缀/EU 共用组 + 本国组 + Openai |
 | 大洋洲 | `AU.yml`、`NZ.yml` | Global + `? media` + Oceania Media 共用组 + 本国组 + Openai |
 
-当前共 23 个文件。多国分组的国家代码从上游动态发现，新增国家会自动生成新文件；保留上游的 `UAE` 命名。兼容 `IT Rai Play` 空格前缀，并把 `NBA TV`、`HBO GO Asia` 识别为共用组。共用组出现在国家组之后时仍加入每个国家文件。
+当前共 25 个文件。`SA.yml` 表示南美。多国分组的国家代码从上游动态发现，新增国家会自动生成新文件；保留上游的 `UAE` 命名。兼容 `IT Rai Play` 空格前缀，并把 `NBA TV`、`HBO GO Asia` 识别为共用组。共用组出现在国家组之后时仍加入每个国家文件。
 
 冒号国家前缀使用 ISO 两字母代码及 `UAE`；无冒号的两字母空格前缀只兼容已核实的 `IT`，其他形式报错，避免把 `TV 2 Play` 等服务名误当成国家。
 

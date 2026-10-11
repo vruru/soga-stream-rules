@@ -16,6 +16,10 @@ FIXTURE = '''\
 # ---------- > Taiwan Media
 # > Local
 "domain:tw.test",
+# ---------- > Canada Media
+"domain:ca.test",
+# ---------- > South America Media
+"domain:sa.test",
 # ---------- > Japan Media
 "domain:jp.test",
 # ---------- > North America Media
@@ -73,6 +77,8 @@ malformed ignored China rule
 
 EXPECTED = {
     'TW': {'domain:global.test','domain:tw.test','domain:openai.test'},
+    'CA': {'domain:global.test','domain:ca.test','domain:openai.test'},
+    'SA': {'domain:global.test','domain:sa.test','domain:openai.test'},
     'JP': {'domain:global.test','domain:jp.test','domain:openai.test'},
     'US': {'domain:global.test','domain:us.test','domain:openai.test'},
     'KR': {'domain:global.test','domain:kr.test','domain:openai.test'},
@@ -84,14 +90,14 @@ EXPECTED = {
     'GB': {'domain:global.test','domain:eu-common.test','domain:eu-common2.test','domain:gb.test','domain:openai.test'},
     'AU': {'domain:global.test','domain:unknown-media.test','domain:oc-common.test','domain:au.test','domain:openai.test'},
     'NZ': {'domain:global.test','domain:unknown-media.test','domain:oc-common.test','domain:nz.test','domain:openai.test'},
-    'HK': {'domain:global.test','domain:tw.test','domain:jp.test','domain:us.test','domain:kr.test',
+    'HK': {'domain:global.test','domain:tw.test','domain:ca.test','domain:sa.test','domain:jp.test','domain:us.test','domain:kr.test',
            'domain:india-extra.test','domain:unknown-media.test','domain:sea-common.test','domain:sg.test',
            'domain:sea-common-late.test','domain:th.test','domain:in.test','domain:uae.test',
            'domain:eu-common.test','domain:eu-common2.test','domain:it.test','domain:gb.test',
            'domain:oc-common.test','domain:au.test','domain:nz.test','domain:openai.test',
            'domain:claude.test','domain:other.test','domain:future.test'},
 }
-ALL_CODES = set(EXPECTED)  # 13 codes
+ALL_CODES = set(EXPECTED)  # 15 codes
 
 
 def _rules(outputs, code):
@@ -281,9 +287,11 @@ class TestUpdateRules(unittest.TestCase):
             self.assertEqual(rc3, 0)
 
     def test_15_cross_region_collision(self):
-        source = FIXTURE.replace('# > SG:meWATCH', '# > GB:Collision')
-        with self.assertRaises(ValueError):
-            u.generate(source)
+        for code in ('GB', 'CA', 'SA'):
+            with self.subTest(code=code):
+                source = FIXTURE.replace('# > SG:meWATCH', f'# > {code}:Collision')
+                with self.assertRaises(ValueError):
+                    u.generate(source)
 
     def test_17_ambiguous_space_prefix_is_rejected(self):
         source = FIXTURE.replace('# > ViaPlay', '# > TV 2 Play')
@@ -436,6 +444,32 @@ class TestUpdateRules(unittest.TestCase):
                 result = u.preserve_header(generated, custom.encode()).decode()
                 self.assertTrue(result.startswith(custom))
                 self.assertEqual(next(iter(yaml.safe_load(result).values()))['strategy'], 'ipv6_first')
+
+    def test_24_canada_south_america_required(self):
+        for section, rule in [('Canada Media', 'ca.test'), ('South America Media', 'sa.test')]:
+            for source in [FIXTURE.replace(f'# ---------- > {section}\n"domain:{rule}",\n', ''),
+                           FIXTURE.replace(f'"domain:{rule}",', '')]:
+                with self.subTest(section=section, missing='missing' if section not in source else 'empty'):
+                    with self.assertRaises(ValueError):
+                        u.generate(source)
+
+    def test_25_canada_south_america_custom_headers(self):
+        outputs = _gen()
+        for code, domain in [('CA', 'ca.test'), ('SA', 'sa.test')]:
+            with self.subTest(code=code), tempfile.TemporaryDirectory() as td:
+                directory = Path(td)
+                u.update_files(outputs, directory)
+                _, body = u.split_dns_document(outputs[code + '.yml'])
+                custom = f'# manual {code}\r\ntcp://custom.example.net:5353:\r\n  strategy: ipv6_first\r\n  rules:\r\n'
+                target = directory / (code + '.yml')
+                target.write_bytes((custom + body).encode())
+                changed = u.generate(FIXTURE.replace(domain, 'updated-' + domain))
+                self.assertEqual(set(u.update_files(changed, directory)), {code + '.yml', 'HK.yml'})
+                header, _ = u.split_dns_document(target.read_bytes().decode())
+                self.assertEqual(header.encode(), custom.encode())
+                doc = yaml.safe_load(target.read_bytes())
+                self.assertIn('domain:updated-' + domain, next(iter(doc.values()))['rules'])
+                self.assertEqual(u.update_files(changed, directory), [])
 
     @staticmethod
     def _write(d):

@@ -47,6 +47,8 @@ SPACE_COUNTRIES = frozenset({"IT"})
 REQUIRED_SECTIONS = (
     "Global Plaform",
     "Taiwan Media",
+    "Canada Media",
+    "South America Media",
     "Japan Media",
     "North America Media",
     "Korean Media",
@@ -226,6 +228,8 @@ def build_regions(blocks: list[dict]) -> dict[str, list[dict]]:
     # Categorize blocks
     global_blocks = [b for b in work if b["section"] == "Global Plaform"]
     tw_blocks = [b for b in work if b["section"] == "Taiwan Media"]
+    ca_blocks = [b for b in work if b["section"] == "Canada Media"]
+    sa_blocks = [b for b in work if b["section"] == "South America Media"]
     jp_blocks = [b for b in work if b["section"] == "Japan Media"]
     na_blocks = [b for b in work if b["section"] == "North America Media"]
     kr_blocks = [b for b in work if b["section"] == "Korean Media"]
@@ -263,8 +267,10 @@ def build_regions(blocks: list[dict]) -> dict[str, list[dict]]:
     # HK: all non-China blocks
     regions["HK"] = work[:]
 
-    # TW, JP, US, KR: Global + section + AI(Openai)
+    # TW, CA, SA, JP, US, KR: Global + section + AI(Openai)
     regions["TW"] = global_blocks + tw_blocks + ai_openai
+    regions["CA"] = global_blocks + ca_blocks + ai_openai
+    regions["SA"] = global_blocks + sa_blocks + ai_openai
     regions["JP"] = global_blocks + jp_blocks + ai_openai
     regions["US"] = global_blocks + na_blocks + ai_openai
     regions["KR"] = global_blocks + kr_blocks + ai_openai
