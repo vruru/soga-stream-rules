@@ -1,4 +1,4 @@
-tcp://example.com:
+tcp://nrt.core.access.zznet.fun:
   strategy: ipv4_first
   rules:
     # ---------- > Global Plaform
