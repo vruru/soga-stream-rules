@@ -1,4 +1,4 @@
-tcp://example.com:
+tcp://sin2.edge.access.zznet.fun:
   strategy: ipv4_first
   rules:
     # ---------- > Global Plaform
