@@ -19,11 +19,13 @@
 | 日本 | `JP.yml` | Global + Japan Media + Openai |
 | 美国 | `US.yml` | Global + North America Media + Openai |
 | 韩国 | `KR.yml` | Global + Korean Media + Openai |
-| 亚太 | `SG.yml`、`TH.yml`、`ID.yml`、`VN.yml`、`MY.yml`、`IN.yml`、`UAE.yml` | Global + SouthEastAsia media 共用组 + 本国组；IN 另加 Indian Media；按当前需求不加 AI |
+| 亚太 | `SG.yml`、`TH.yml`、`ID.yml`、`VN.yml`、`MY.yml`、`PH.yml`、`IN.yml`、`UAE.yml` | Global + SouthEastAsia media 共用组 + 本国组；IN 另加 Indian Media；按当前需求不加 AI |
 | 欧洲 | `GB.yml`、`FR.yml`、`DE.yml`、`NL.yml`、`IT.yml`、`RU.yml`、`UA.yml`、`CH.yml`、`TR.yml` | Global + Europe Media 无前缀/EU 共用组 + 本国组 + Openai |
 | 大洋洲 | `AU.yml`、`NZ.yml` | Global + `? media` + Oceania Media 共用组 + 本国组 + Openai |
 
-当前共 25 个文件。`SA.yml` 表示南美。多国分组的国家代码从上游动态发现，新增国家会自动生成新文件；保留上游的 `UAE` 命名。兼容 `IT Rai Play` 空格前缀，并把 `NBA TV`、`HBO GO Asia` 识别为共用组。共用组出现在国家组之后时仍加入每个国家文件。
+当前共 26 个文件。`SA.yml` 表示南美。多国分组的国家代码从上游动态发现，新增国家会自动生成新文件；保留上游的 `UAE` 命名。兼容 `IT Rai Play` 空格前缀，并把 `NBA TV`、`HBO GO Asia` 识别为共用组。共用组出现在国家组之后时仍加入每个国家文件。
+
+`PH.yml` 明确纳入自动生成范围，不依赖上游出现 `PH:` 标题：当前上游没有菲律宾专属分组时，使用 Global + SouthEastAsia 共用组（包括 HBO GO Asia、B-Global、CatchPlay+），不混入 `MY:sooka` 等其他国家专属规则，也不加 AI。将来新增 `PH:` 分组时自动合并到菲律宾文件。东南亚共用活动规则缺失时整批报错，不生成缩水的菲律宾规则。PH 的新文件 DNS 头同其他未指定地区一样使用占位地址，使用前应手动设置所需 DNS，后续更新原样保留。
 
 冒号国家前缀使用 ISO 两字母代码及 `UAE`；无冒号的两字母空格前缀只兼容已核实的 `IT`，其他形式报错，避免把 `TV 2 Play` 等服务名误当成国家。
 
@@ -60,26 +62,22 @@ tcp://nrt.core.access.zznet.fun:
 
 ## 使用和验证
 
-需要 Python 3.12 或更新版本。生产转换只用标准库；PyYAML 仅用于测试。
+需要 Python 3.12 或更新版本。生产转换只用标准库；PyYAML 仅用于本地测试。回归测试和真实上游验证在本机完成，新增测试与验证材料不上传，也不在自动更新任务中执行。
 
 在本项目目录执行：
 
 ```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements-dev.txt
-.venv/bin/python -m unittest discover -s tests -v
-
 # 拉取上游并生成 rules/*.yml
-.venv/bin/python scripts/update_rules.py
+python3 scripts/update_rules.py
 
 # 只比较，绝不写文件
-.venv/bin/python scripts/update_rules.py --check
+python3 scripts/update_rules.py --check
 
 # 用已经下载的列表离线生成
-.venv/bin/python scripts/update_rules.py --source-file /path/to/stream.xray.list
+python3 scripts/update_rules.py --source-file /path/to/stream.xray.list
 
 # 指定其他规则输出目录
-.venv/bin/python scripts/update_rules.py \
+python3 scripts/update_rules.py \
   --output-dir /path/to/local-dns-rules
 ```
 
@@ -87,11 +85,11 @@ python3 -m venv .venv
 
 ## 自动更新
 
-`.github/workflows/update-rules.yml` 提供定时和手动触发，也在脚本、测试、依赖或工作流修改后运行。定时表达式 `2-57/5 * * * *` 表示每小时第 2、7、12、17、22、27、32、37、42、47、52、57 分钟检查，间隔 5 分钟；GitHub 定时执行可能延迟。
+`.github/workflows/update-rules.yml` 保留既有定时和手动触发，只负责拉取上游、生成和发布规则；本地回归通过后才提交生成器改动，不再运行云端测试任务。定时表达式 `2-57/5 * * * *` 表示每小时第 2、7、12、17、22、27、32、37、42、47、52、57 分钟检查，间隔 5 分钟；GitHub 定时执行可能延迟。
 
 GitHub 对连续 60 天没有仓库活动的公开仓库会自动停用定时工作流。长期无规则更新时，可在 Actions 页面重新启用工作流；这是 [GitHub schedule 的平台限制](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)。
 
-PR 只运行测试，更新任务仅在仓库默认分支运行。生成任务拥有 `contents: write` 权限，分支保护或账户策略若阻止机器人推送，需要给该任务合适的发布权限。
+更新任务仅在仓库默认分支运行，PR 不执行生成发布。生成任务拥有 `contents: write` 权限，分支保护或账户策略若阻止机器人推送，需要给该任务合适的发布权限。
 
 只有 `rules/` 的实际内容变化才提交和推送；不把更新时间、上游全文或原文件哈希写入产物。普通注释和 China Media 内容变化不会造成无意义提交。国家/服务标题是输出中保留的注释，标题变化会反映到对应文件。
 
@@ -103,7 +101,7 @@ PR 只运行测试，更新任务仅在仓库默认分支运行。生成任务�
 
 - `AGENTS.md`：本项目维护约定。
 - `scripts/update_rules.py`：解析、地区组合、生成和文件更新。
-- `tests/test_update_rules.py`：地区集合、隔离、动态发现、结构、稳定性和失败保护测试。
+- `tests/test_update_rules.py`：已有回归基线；其固定地区集合未包含新增的 PH，运行时需在本地更新预期，新增用例和适配材料仅保留本地。
 - `rules/*.yml`：公开的完整 DNS 配置；允许手动修改头部，rules 下内容由脚本生成。
 
 上游未附加到此项目，临时列表、下载文件、密钥和令牌不应进入公共仓库。

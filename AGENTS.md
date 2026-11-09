@@ -2,7 +2,8 @@
 
 先读 README.md 确认地区组合、Soga DNS YAML 结构和更新方式。
 
-- 核心入口：scripts/update_rules.py；验证：python -m unittest discover -s tests -v。
+- 核心入口：scripts/update_rules.py；验证只在本机执行。tests/ 的历史固定地区集合不含 PH，按当前输出在本地适配后回归；新增测试和验证材料仅保留 LocalOps，不上传或新增云端测试。
+- PH 明确生成 Global + SouthEastAsia 共用规则，没有 PH: 分组也要生成；未来出现 PH: 自动加入，不混入 MY 等其他国家组。保持国家隔离、共用规则缺失失败和 DNS 手工头部保留。
 - rules/*.yml 的 rules 列表和分组注释是生成产物；DNS 头部允许手动修改，更新必须原样保留现有头部。
 - 上游来源只使用 README 指定的公开列表；任何未知活动语法、缺失必需分组和已发布国家消失都应失败并保留旧文件。
 - 网络生成与本地输入共用同一解析路径；生产仅使用 Python 标准库，PyYAML 是测试依赖。

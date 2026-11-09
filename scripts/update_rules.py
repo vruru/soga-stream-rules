@@ -43,6 +43,8 @@ ISO_2 = frozenset(
 )
 COLON_ALLOWED = ISO_2 | frozenset({"UAE"})
 SPACE_COUNTRIES = frozenset({"IT"})
+# Publish these regions even when upstream has no country-specific subgroup.
+SEA_FALLBACK = frozenset({"PH"})
 
 REQUIRED_SECTIONS = (
     "Global Plaform",
@@ -281,15 +283,18 @@ def build_regions(blocks: list[dict]) -> dict[str, list[dict]]:
             raise ValueError(f"region code collision: {code}")
         regions[code] = blks
 
-    # SEA countries: iterate sorted keys
+    # SEA countries: retain explicit shared-only regions alongside discovery.
     # Correction 3: Multi-country section needs >=1 country with rules
     has_sea_rules = any(any(b["rules"] for b in blks) for blks in sea_countries.values())
     if not has_sea_rules:
         raise ValueError("SouthEastAsia media section must have at least one country with rules")
 
-    for cc in sorted(sea_countries.keys()):
-        country_blks = sea_countries[cc]
-        if not any(b["rules"] for b in country_blks):
+    if not any(b["rules"] for b in sea_shared):
+        raise ValueError("SouthEastAsia media section must have shared rules")
+
+    for cc in sorted(sea_countries.keys() | SEA_FALLBACK):
+        country_blks = sea_countries.get(cc, [])
+        if cc not in SEA_FALLBACK and not any(b["rules"] for b in country_blks):
             continue
         combined = global_blocks + sea_shared + country_blks
         if cc == "IN":
